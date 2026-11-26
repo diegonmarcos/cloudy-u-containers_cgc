@@ -66,11 +66,16 @@ EOF
 cat > "$W/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 S="$FAKE_STORE"
+# Asset id = "<tag>@<name>" with / replaced, so the octet-stream route can find the file.
 digest_json() { # $1=tag
   for f in "$S/$1"/*; do [ -f "$f" ] || continue
-    printf '{"name":"%s","digest":"sha256:%s","size":%s}\n' "$(basename "$f")" "$(sha256sum "$f" | cut -d' ' -f1)" "$(wc -c < "$f")"
+    printf '{"id":"%s","name":"%s","digest":"sha256:%s","size":%s}\n' "$1@$(basename "$f")" "$(basename "$f")" "$(sha256sum "$f" | cut -d' ' -f1)" "$(wc -c < "$f")"
   done | jq -s '{assets: .}'
 }
+[ "$1" = "release" ] && [ "$2" = "download" ] && { echo "STUB: gh release download is GraphQL, scripts must use REST" >&2; exit 99; }
+if [ "$1" = "api" ] && [ "$2" = "-H" ]; then
+  path="$4"; id="${path##*/assets/}"; cat "$S/${id%%@*}/${id#*@}" || exit 1; exit 0
+fi
 case "$1 $2" in
   "api repos/"*)
     path="$2"; shift 2; q=""; [ "${1:-}" = "--jq" ] && q="$2"

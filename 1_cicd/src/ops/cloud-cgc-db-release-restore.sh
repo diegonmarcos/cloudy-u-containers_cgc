@@ -10,7 +10,7 @@
 #
 #  Downloads manifest.json, SHA256SUMS and the parts, checks every checksum
 #  (parts and the whole archive) before extracting anything, then unpacks.
-#  Needs gh (GH_TOKEN for a private repository), sha256sum, tar, zstd or gzip.
+#  Needs gh (REST only; GH_TOKEN for a private repository), sha256sum, tar, zstd or gzip.
 # ──────────────────────────────────────────────────────────────────────────
 set -eu
 TAG="${1:?usage: $0 <tag> <dest-dir> [owner/repo]}"
@@ -20,7 +20,14 @@ REPO="${3:-diegonmarcos/cloudy-u-containers_cgc}"
 [ ! -e "$DEST/octocode-db" ] || { echo "::error::$DEST/octocode-db already exists — refusing to overwrite"; exit 1; }
 WORK=$(mktemp -d); trap 'rm -rf "$WORK"' EXIT
 
-gh release download "$TAG" -R "$REPO" -D "$WORK" >/dev/null
+# REST only (gh release download goes through GraphQL, which not every token may use).
+gh api "repos/$REPO/releases/tags/$TAG" --jq '.assets[] | "\(.id) \(.name)"' > "$WORK/.assets" \
+  || { echo "::error::release $REPO@$TAG not found"; exit 1; }
+while read -r id name; do
+  case "$name" in */*|.*|'') echo "::error::unexpected asset name '$name'"; exit 1 ;; esac
+  gh api -H 'Accept: application/octet-stream' "repos/$REPO/releases/assets/$id" > "$WORK/$name"
+done < "$WORK/.assets"
+rm -f "$WORK/.assets"
 [ -f "$WORK/manifest.json" ] && [ -f "$WORK/SHA256SUMS" ] \
   || { echo "::error::release $REPO@$TAG has no manifest.json/SHA256SUMS"; exit 1; }
 

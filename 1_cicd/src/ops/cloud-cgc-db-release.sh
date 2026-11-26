@@ -171,10 +171,18 @@ rel_manifest() { # $1=OUTDIR $2=PKG $3=LOCAL_NAME $4=IMAGE $5=DIGEST $6=compress
       created:$created, caller:$caller, run_id:$run, commit:$cgc_sha}' > "$_rm_out/manifest.json"
 }
 
+# Download one asset of a release through the REST API (gh release download goes
+# through GraphQL, which not every token or session may use). rc 1 when absent.
+rel_asset_get() { # $1=REPO $2=TAG $3=ASSET_NAME $4=DEST_FILE
+  _rag_id=$(gh api "repos/$1/releases/tags/$2" --jq ".assets[] | select(.name==\"$3\") | .id" 2>/dev/null) || return 1
+  [ -n "$_rag_id" ] || return 1
+  gh api -H 'Accept: application/octet-stream' "repos/$1/releases/assets/$_rag_id" > "$4" 2>/dev/null
+}
+
 # Digest of the image the existing release was cut from ("" when none).
 rel_released_digest() { # $1=TAG
   _rrd_dir=$(mktemp -d)
-  if gh release download "$1" -R "$GITHUB_REPOSITORY" -p manifest.json -D "$_rrd_dir" >/dev/null 2>&1; then
+  if rel_asset_get "$GITHUB_REPOSITORY" "$1" manifest.json "$_rrd_dir/manifest.json"; then
     jq -r '.image_digest // empty' "$_rrd_dir/manifest.json" 2>/dev/null || true
   fi
   rm -rf "$_rrd_dir"
@@ -212,7 +220,7 @@ rel_verify_remote() { # $1=TAG $2=OUTDIR
     if [ -z "$_rvr_got" ]; then
       # Older API answers carry no digest: download that asset and hash it.
       _rvr_d=$(mktemp -d)
-      gh release download "$1" -R "$GITHUB_REPOSITORY" -p "$_rvr_f" -D "$_rvr_d" >/dev/null 2>&1 \
+      rel_asset_get "$GITHUB_REPOSITORY" "$1" "$_rvr_f" "$_rvr_d/$_rvr_f" \
         || { rm -rf "$_rvr_d"; rel_err "asset $_rvr_f missing from release $1"; return 1; }
       _rvr_got="sha256:$(sha256sum "$_rvr_d/$_rvr_f" | cut -d' ' -f1)"
       rm -rf "$_rvr_d"
