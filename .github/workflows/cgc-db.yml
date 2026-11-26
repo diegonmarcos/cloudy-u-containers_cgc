@@ -158,7 +158,7 @@ jobs:
     # coalesce is SKIPPED on dispatch; !cancelled() keeps a skipped need from skipping this.
     needs: [guard, coalesce]
     if: ${{ !cancelled() && needs.guard.result == 'success' && (github.event_name != 'workflow_dispatch' || inputs.phase == 'both') }}
-    # Explicit, not inherited: cgc-db-index.yml's `index` job asks for packages: write
+    # Explicit, not inherited: cgc-db-index.yml's `index` job asks for packages: write and contents: write (GitHub release channel, #1940)
     # (it pushes cgc-db-<repo> checkpoints), and a called job can never hold MORE than its
     # caller job. Without this block the caller inherits the repo's default token, which
     # GitHub makes read-only for new repos (this one dates from 2026-10-09), and GitHub then
@@ -166,7 +166,7 @@ jobs:
     # 37987847606 and 38044868048. The legacy cloud-infra copy has no such block and runs,
     # because that repo's default token is read/write.
     permissions:
-      contents: read
+      contents: write
       packages: write
     uses: ./.github/workflows/cgc-db-index.yml
     with:
@@ -184,9 +184,9 @@ jobs:
     # coalesce is SKIPPED on dispatch; !cancelled() keeps a skipped need from skipping this.
     needs: [guard, coalesce]
     if: ${{ !cancelled() && needs.guard.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.phase == 'semantic' }}
-    # Same explicit permissions as per-repo (the called index job needs packages: write).
+    # Same explicit permissions as per-repo (the called index job needs packages: write and contents: write).
     permissions:
-      contents: read
+      contents: write
       packages: write
     uses: ./.github/workflows/cgc-db-index.yml
     with:
@@ -212,9 +212,9 @@ jobs:
         && github.event_name == 'workflow_dispatch' && inputs.phase == 'graphrag'
         && (needs.semantic.result == 'success' || needs.semantic.result == 'skipped' || needs.semantic.result == 'failure' || needs.semantic.result == 'cancelled')
       }}
-    # Same explicit permissions as per-repo (the called index job needs packages: write).
+    # Same explicit permissions as per-repo (the called index job needs packages: write and contents: write).
     permissions:
-      contents: read
+      contents: write
       packages: write
     uses: ./.github/workflows/cgc-db-index.yml
     with:

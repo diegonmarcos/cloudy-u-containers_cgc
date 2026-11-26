@@ -200,8 +200,10 @@ jobs:
     # timeout concludes CANCELLED and would skip graphrag. 350, was 330: phase=both runs
     # graphrag in this same job after semantic (#888). Hosted runners cap a job at 360.
     timeout-minutes: 350
+    # contents: write is for the GitHub release channel (#1940, step "Publish the index as
+    # a GitHub release" below); packages: write for the GHCR checkpoints.
     permissions:
-      contents: read
+      contents: write
       packages: write
     strategy:
       fail-fast: false
@@ -335,6 +337,18 @@ jobs:
           [ "$left" -gt 60 ] || left=60
           echo "[cgc-db] graphrag step deadline: ${left}s from now (${CGC_STEP_DEADLINE_MIN}m after the job clock)"
           timeout --kill-after=120 "$left" sh 1_cicd/src/ops/cloud-cgc-db-update.sh
+      # Second publication channel (#1940): the image the index steps just pushed is pulled
+      # back and released on THIS caller as <tag_prefix><pkg> (parts < 2 GiB, SHA256SUMS,
+      # manifest.json last). Config .per_repo_publish.github_release in build.json; a
+      # private repo's index is only released on a private caller; an unchanged image is
+      # not re-uploaded. !cancelled(): a timed-out index step still leaves a served image.
+      - name: "Publish the index as a GitHub release — ${{ matrix.repo }}"
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        env:
+          CGC_INDEX_REPOS: ${{ matrix.repo }}
+          GH_TOKEN: ${{ github.token }}
+        run: sh 1_cicd/src/ops/cloud-cgc-db-release.sh
       # Self-hosted only: leave nothing of this job in the persistent runner's home.
       - name: Self-hosted cleanup (deploy keys, registry login)
         if: ${{ always() && env.CGC_RUNNER != 'ubuntu-latest' }}
